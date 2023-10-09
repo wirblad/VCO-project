@@ -13,11 +13,19 @@ I want to create a music instrument, a one-voice synth. Similar to a VCO in a mo
 
 Side note: To make any pratical use of such a simple instrument as this in my own musicmaking I need to make it a bit random and unpredictable. Like a random module in a modular system. (this is my personal belief based on how I write/play/record music.)
 
+Thanks to: cslammy for using his/her AVR-SPI-C library (MIT license)
+https://github.com/cslammy/AVR-SPI-C-library
+
+Thanks to: HAGIWO for inspiration. His build using Nano and AD9833 got me started on this project.
+https://www.youtube.com/watch?v=dKddNuAXWYU
+
 23-10-09
 
 Pot1: Choose a note starting from A. One of twelve notes can be selected.
 Pot2: Choose a chord. One of 10 chords can be selected. Maj,Maj7,Maj9,Maj11,Maj13,Min,Min7,Min9,Min11,Min13. Maj13 and Min13 is the same as all the notes in the corresponding key.
 Pot3: Volume.
+
+
 
 
 
