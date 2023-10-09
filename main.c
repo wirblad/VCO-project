@@ -11,21 +11,31 @@
 #include "millis.h"
 #include "spi3.h"
 
-//#define F_CPU 16000000UL
-//#define BAUD 9600
-//#define BAUD_TOL 2
-
-//const float refFreq = 25000000.0;
-//long refFreq = 25000000;
-
 const int SINE = 0x2000;                    
 const int SQUARE = 0x2028;                  
-const int TRIANGLE = 0x2002; 
+const int TRIANGLE = 0x2002;
 
-//#define LOW 0
-//#define HIGH 1
+/*
+A major/minor triad is the most basic chord and made out of 3 tone. The 7thchord adds one note, the 9th adds another and so on.
+A major/minor 13th chord consists of 7 notes, that is the same as the complete major or minor key.
+*/
+#define MAJOR     3          
+#define MAJOR7    4
+#define MAJOR9    5
+#define MAJOR11   6
+#define MAJOR13   7
 
-//const int FSYNC = 10;
+#define MINOR     3          
+#define MINOR7    4
+#define MINOR9    5
+#define MINOR11   6
+#define MINOR13   7
+
+#define MAJORKEY  1
+#define MINORKEY  2
+
+#define MAJORINTERVAL 4
+#define MINORINTERVAL 3
 
 #define BIT_SET(a, b) ((a) |= (1ULL << (b)))
 #define BIT_CLEAR(a,b) ((a) &= ~(1ULL<<(b)))
@@ -33,11 +43,14 @@ const int TRIANGLE = 0x2002;
 #define BIT_CHECK(a,b) (!!((a) & (1ULL<<(b))))
 
 #define NOTE_PIN 1
+#define CHORD_PIN 2
+
+uint8_t key = MAJORKEY;               //set default key as major
+unsigned long chordArray[7];          //Max number of tones in a chord is 7, the same as the notes in a key.
 
 int main(){
     
   init_serial();
-  //srand(time(NULL));
   init_spi_master();
   _delay_ms(100);
   AD9833reset();
@@ -48,10 +61,10 @@ int main(){
   millis_init();
   sei();
 
-  unsigned long freq = 5;   //START VALUE
-  int WaveType = SQUARE;    //START VALUE
+  int WaveType = SQUARE;                //START VALUE
+  unsigned long freq = 5;               //START VALUE
 
-  volatile antalMilliSekunderSenasteBytet = 0;                  //TODO: Kontrollera datatyper för att spara plats!!!! KONTROLLERA NOTE SELECT NOGA!!!!!
+  volatile antalMilliSekunderSenasteBytet = 0;                 
     
   while(1){
 
@@ -62,41 +75,134 @@ int main(){
        }
 
 
-    freq = getNote();
-    playChord(freq, WaveType);
-    //AD9833setFrequency(freq, WaveType);
+    freq = getNote(); // the user selects the root note of the chord.
+    
+    uint16_t chord = chooseChord();
+    if(key == MAJORKEY)
+      createMajorKey(freq);
+    if(key == MINORKEY)
+      createMinorKey(freq);
+
+    playChord(chord,WaveType); //play the notes from the chord array, how many notes we play depends on the currently selected chord.
     antalMilliSekunderSenasteBytet = millis_get();
-
   }
-
-
 return 0;
 }
 
-void playChord(unsigned long freq, int WaveType){
+/*
+The user can choose 10 different chord. Major and minor, basic triad, extended chord 7th,9th,11th,13th.
+If one choose 13th the chord contains all 7 notes of the coresponding major/minor key.
+*/
+int chooseChord(){
 
-    unsigned long START_FREQ = freq;
-    int howmanysemitones = 4;                 //M7 chord
+  uint16_t chord = analogRead(CHORD_PIN);
 
-    for(int i = 0; i<howmanysemitones; i++){
-          
-          AD9833setFrequency(freq, WaveType);
-          _delay_ms(200);
-          freq = freq * 1.05946; //next semitone
-          freq = freq * 1.05946; //next semitone
-          freq = freq * 1.05946; //next semitone
-      }
+  if(chord < 510)
+    key = MAJORKEY;
+  else  
+    key = MINORKEY;
+  
+  if(chord < 102)
+    return MAJOR;
+  if(chord >= 102 && chord < 204)
+    return MAJOR7;
+  if(chord >= 204 && chord < 306)
+    return MAJOR9;
+  if(chord >= 306 && chord < 408)
+    return MAJOR11;
+  if(chord >= 408 && chord < 510)
+    return MAJOR13;
+  if(chord >= 510 && chord < 612)
+    return MINOR;
+  if(chord >= 612 && chord < 714)
+    return MINOR7;
+  if(chord >= 714 && chord < 816)
+    return MINOR9;
+  if(chord >= 816 && chord < 918)
+    return MINOR11;
+  if(chord >= 918 && chord <= 1023)
+    return MINOR13;
 }
 
 /*
-Read pot and select one of 12 notes. If A is 440hz, then next A a octabe above is 440*2hz = 880hz.
-Between 440hz-880hz we have 12 notes.
+Fill the chord array with all the notes in the major key.
+*/
+void createMajorKey(unsigned long freq){
+  
+  chordArray[0] = freq;       //ROOT NOTE, TONIC
+  freq = getNote2(freq, MAJORINTERVAL);   
+  chordArray[1] = freq;       //SECOND NOTE, ONE MAJOR INTERVALL UP
+  freq = getNote2(freq, MINORINTERVAL);  
+  chordArray[2] = freq;       //THIRD NOTE, ONE MINOR INTERVALL UP
+  freq = getNote2(freq, MAJORINTERVAL);  
+  chordArray[3] = freq;       //FOURTH NOTE, ONE MAJOR INTERVALL UP, this is Major7 extension
+  freq = getNote2(freq, MINORINTERVAL);  
+  chordArray[4] = freq;       //FIFTH NOTE, ONE MINOR INTERVALL UP, this is Major9 extension
+  freq = getNote2(freq, MINORINTERVAL);  
+  chordArray[5] = freq;       //SIXTH NOTE, ONE MINOR INTERVALL UP, this is Major11 extension
+  freq = getNote2(freq, MAJORINTERVAL);  
+  chordArray[6] = freq;       //SEVENTH NOTE, ONE MAJOR INTERVALL UP, this is Major13 extension
+  
+}
+
+void createMinorKey(unsigned long freq){
+  
+  chordArray[0] = freq;       //ROOT NOTE, TONIC
+  freq = getNote2(freq, MINORINTERVAL);   
+  chordArray[1] = freq;       //SECOND NOTE, ONE MINOR INTERVALL UP
+  freq = getNote2(freq, MAJORINTERVAL);  
+  chordArray[2] = freq;       //THIRD NOTE, ONE MAJOR INTERVALL UP
+  freq = getNote2(freq, MINORINTERVAL);  
+  chordArray[3] = freq;       //FOURTH NOTE, ONE MINOR INTERVALL UP, this is Minor7 extension
+  freq = getNote2(freq, MAJORINTERVAL);  
+  chordArray[4] = freq;       //FIFTH NOTE, ONE MAJOR INTERVALL UP, this is Minor9 extension
+  freq = getNote2(freq, MINORINTERVAL);  
+  chordArray[5] = freq;       //SIXTH NOTE, ONE MINOR INTERVALL UP, this is Minor11 extension
+  freq = getNote2(freq, MAJORINTERVAL);  
+  chordArray[6] = freq;       //SEVENTH NOTE, ONE MAJOR INTERVALL UP, this is Minor13 extension
+  
+}
+
+/*
+Play note from the chordArray, number of notes to be played depends on the selected chord.
+*/
+void playChord(int chord, int WaveType){
+
+  for(int i = 0; i < chord; i++){
+
+    AD9833setFrequency(chordArray[i], WaveType);
+    
+    
+    
+    _delay_ms(450);
+    
+  }
+}
+
+/*
+Take one freq and returns the freq that is a number of semitones above. 
+*/
+int getNote2(unsigned long freq, int howmanysemitones){
+
+  for(int i = 0; i<howmanysemitones; i++){
+          freq = freq * 1.05946;
+          
+      }
+  return freq;
+
+}
+
+/*
+Read pot and select one of 12 notes. If A is 440hz, then next A a octave above is 440*2hz = 880hz.
+Between 440hz-880hz we have 12 notes. To move up a semitone one needes to multipli current note with 1.05946
+The start freq determines the octave.
 */
 int getNote(){
 
   uint16_t note = analogRead(NOTE_PIN);
 
-      unsigned long START_FREQ = 440;
+      //unsigned long START_FREQ = 440;
+      unsigned long START_FREQ = 220;
       unsigned long freq = START_FREQ;
       int howmanysemitones = 0;
 
@@ -133,7 +239,7 @@ int getNote(){
       if (note > 853.3 && note <= 938.63){
         howmanysemitones=10;
       }
-      if (note > 938.63 && note <= 1024){
+      if (note > 938.63 && note <= 1023){
         howmanysemitones=11;
       }
 
@@ -151,10 +257,10 @@ void AD9833reset() {
 void AD9833setFrequency(unsigned long frequency, int Waveform) {
 
   double calc = 268435456; //2^28
-  double clock = 25000000; //internal osc clock AD9833
+  double clock = 25000000; 
   double FreqWord = (frequency * calc) / clock;
   
-  printf("TEEST %lf", FreqWord);
+  //printf("TEEST %lf", FreqWord);
   uint32_t FreqWord2 = (uint32_t)FreqWord;
  
   uint16_t LSB = (uint16_t)(FreqWord2 & 0x3FFF);                     
@@ -170,7 +276,7 @@ void AD9833setFrequency(unsigned long frequency, int Waveform) {
 
 void WriteRegister(uint16_t dat) {
   
-  printf("DAT: %d", dat);
+  //printf("DAT: %d", dat);
            
   spi_mode(2);
   //delay(10);                          // Give AD9833 time to get ready to receive data.
@@ -178,8 +284,8 @@ void WriteRegister(uint16_t dat) {
   _delay_ms(10);       
   uint8_t low = dat & 0xff;
   uint8_t high = (dat>>8) & 0xff;
-  printf("LOW: %d",low);
-  printf("HIGH: %d",high);
+  //printf("LOW: %d",low);
+  //printf("HIGH: %d",high);
   SPI_SendByte(high);                   // Each AD9833 register is 32 bits wide and each 16
   SPI_SendByte(low);                    // bits has to be transferred as 2 x 8-bit bytes.
   DESELECT();                           //Write done. Set FSYNC high
