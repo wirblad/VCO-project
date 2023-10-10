@@ -42,8 +42,11 @@ A major/minor 13th chord consists of 7 notes, that is the same as the complete m
 #define BIT_FLIP(a,b) ((a) ^= (1ULL<<(b)))
 #define BIT_CHECK(a,b) (!!((a) & (1ULL<<(b))))
 
-#define NOTE_PIN 1
-#define CHORD_PIN 2
+#define TEMPO_PIN   0
+#define NOTE_PIN    1
+#define CHORD_PIN   2
+
+#define TEMPO 1000
 
 uint8_t key = MAJORKEY;               //set default key as major
 unsigned long chordArray[7];          //Max number of tones in a chord is 7, the same as the notes in a key.
@@ -61,30 +64,41 @@ int main(){
   millis_init();
   sei();
 
-  int WaveType = SQUARE;                //START VALUE
-  unsigned long freq = 5;               //START VALUE
+  srand(time(NULL));
 
-  volatile antalMilliSekunderSenasteBytet = 0;                 
-    
+  int WaveType = SQUARE;                //START VALUE IS SQUARE WAVE
+  unsigned long freq = 5;               //START VALUE 5Hz
+
+  volatile unsigned long antalMilliSekunderSenasteBytet = 0;
+  uint16_t chord = MAJOR;
+  uint8_t currentNote = 0;
+            
   while(1){
 
-      if( millis_get() - antalMilliSekunderSenasteBytet > 100 ){
+      uint16_t tempo = analogRead(TEMPO_PIN);
+      if( millis_get() - antalMilliSekunderSenasteBytet > tempo ){
       
+            antalMilliSekunderSenasteBytet = millis_get();
+            AD9833setFrequency(chordArray[currentNote], WaveType);
+            currentNote++;
+            if(currentNote >= chord)
+              currentNote = 0;
             // SWITCH KNAPP!
-        
+           
        }
-
 
     freq = getNote(); // the user selects the root note of the chord.
     
-    uint16_t chord = chooseChord();
+    chord = chooseChord();
     if(key == MAJORKEY)
       createMajorKey(freq);
     if(key == MINORKEY)
       createMinorKey(freq);
+ 
+    //currentNote = (rand() % chord); // rand 0 - 2
 
-    playChord(chord,WaveType); //play the notes from the chord array, how many notes we play depends on the currently selected chord.
-    antalMilliSekunderSenasteBytet = millis_get();
+    //playChord(chord,WaveType); //play the notes from the chord array, how many notes we play depends on the currently selected chord.
+    //antalMilliSekunderSenasteBytet = millis_get();
   }
 return 0;
 }
@@ -171,11 +185,8 @@ void playChord(int chord, int WaveType){
   for(int i = 0; i < chord; i++){
 
     AD9833setFrequency(chordArray[i], WaveType);
-    
-    
-    
     _delay_ms(450);
-    
+
   }
 }
 
