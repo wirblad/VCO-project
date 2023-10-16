@@ -37,6 +37,12 @@ A major/minor 13th chord consists of 7 notes, that is the same as the complete m
 #define MAJORINTERVAL 4
 #define MINORINTERVAL 3
 
+#define RANDOMOFF     0             //RANDOM MODE OFF
+#define RANDOMMODE1   1             //We will choose a random note from the chordarray to be played
+#define RANDOMMODE2   2             //MODE 1 + we will have a 1/4 probability that the current note won't be played this will make for more interesting rythmes.
+#define RANDOMMODE3   3             //MODE 1 + we will have a 1/3 probability that the current note won't be played
+#define RANDOMMODE4   4             //MODE3 + we will make a small offset to the tempo to create odd rythmes
+
 #define BIT_SET(a, b) ((a) |= (1ULL << (b)))
 #define BIT_CLEAR(a,b) ((a) &= ~(1ULL<<(b)))
 #define BIT_FLIP(a,b) ((a) ^= (1ULL<<(b)))
@@ -45,11 +51,15 @@ A major/minor 13th chord consists of 7 notes, that is the same as the complete m
 #define TEMPO_PIN   0
 #define NOTE_PIN    1
 #define CHORD_PIN   2
+#define RANDOM_PIN  5
 
 #define TEMPO 1000
 
 uint8_t key = MAJORKEY;               //set default key as major
 unsigned long chordArray[7];          //Max number of tones in a chord is 7, the same as the notes in a key.
+uint8_t offset = 0;                  
+uint8_t probabilityTobePlayed = 0;
+uint16_t randomMode = 0;
 
 int main(){
     
@@ -72,19 +82,31 @@ int main(){
   volatile unsigned long antalMilliSekunderSenasteBytet = 0;
   uint16_t chord = MAJOR;
   uint8_t currentNote = 0;
-            
+  
+          
   while(1){
 
       uint16_t tempo = analogRead(TEMPO_PIN);
-      if( millis_get() - antalMilliSekunderSenasteBytet > tempo ){
+      if(randomMode == RANDOMMODE4){
+        offset = (rand() % 256);
+      }
+
+      if( millis_get() - antalMilliSekunderSenasteBytet > (tempo+offset) ){
       
             antalMilliSekunderSenasteBytet = millis_get();
-            AD9833setFrequency(chordArray[currentNote], WaveType);
+            
+            if(randomMode > RANDOMOFF)
+              currentNote = (rand() % chord);
+            if(randomMode == RANDOMMODE2)
+              probabilityTobePlayed = (rand() % 4);
+            if(randomMode == RANDOMMODE3 || randomMode == RANDOMMODE4)
+              probabilityTobePlayed = (rand() % 3);
+            if(probabilityTobePlayed != 2)
+              AD9833setFrequency(chordArray[currentNote], WaveType);
             currentNote++;
             if(currentNote >= chord)
               currentNote = 0;
-            // SWITCH KNAPP!
-           
+            // TODO SWITCH KNAPP! SINE,TRIANGLE AND SQAURE    
        }
 
     freq = getNote(); // the user selects the root note of the chord.
@@ -94,13 +116,34 @@ int main(){
       createMajorKey(freq);
     if(key == MINORKEY)
       createMinorKey(freq);
- 
-    //currentNote = (rand() % chord); // rand 0 - 2
 
-    //playChord(chord,WaveType); //play the notes from the chord array, how many notes we play depends on the currently selected chord.
-    //antalMilliSekunderSenasteBytet = millis_get();
+    setRandomState();
+
+    //unsigned long test = 0;
+    //AD9833setFrequency(test, WaveType); //NO SUSTAIN ON NOTES !!!!
+
   }
 return 0;
+}
+
+void setRandomState(){
+
+  uint16_t random = analogRead(RANDOM_PIN);
+
+  if(random < 814)
+    offset = 0;
+  if(random < 204){
+    probabilityTobePlayed = 0;
+    randomMode = RANDOMOFF;
+  }
+  if(random >=204 && random < 408)  
+    randomMode = RANDOMMODE1;
+  if(random >=408 && random < 610)
+    randomMode = RANDOMMODE2;
+  if(random >=610 && random < 814)
+    randomMode = RANDOMMODE3;
+  if(random >=814 && random <= 1023)
+    randomMode = RANDOMMODE4;
 }
 
 /*
@@ -179,16 +222,16 @@ void createMinorKey(unsigned long freq){
 
 /*
 Play note from the chordArray, number of notes to be played depends on the selected chord.
+NOT USING
 */
-void playChord(int chord, int WaveType){
+// void playChord(int chord, int WaveType){
 
-  for(int i = 0; i < chord; i++){
+//   for(int i = 0; i < chord; i++){
 
-    AD9833setFrequency(chordArray[i], WaveType);
-    _delay_ms(450);
-
-  }
-}
+//     AD9833setFrequency(chordArray[i], WaveType);
+//     _delay_ms(450);
+//   }
+// }
 
 /*
 Take one freq and returns the freq that is a number of semitones above. 
@@ -200,7 +243,6 @@ int getNote2(unsigned long freq, int howmanysemitones){
           
       }
   return freq;
-
 }
 
 /*
@@ -265,13 +307,16 @@ void AD9833reset() {
   WriteRegister(0x100);   // Write '1' to AD9833 Control register bit D8.
 }
 
+/*
+This is the code for writing to the AD9833 registers using SPI.
+See the AD9833 data sheet for a better understanding of how this works.
+*/
 void AD9833setFrequency(unsigned long frequency, int Waveform) {
 
   double calc = 268435456; //2^28
   double clock = 25000000; 
   double FreqWord = (frequency * calc) / clock;
   
-  //printf("TEEST %lf", FreqWord);
   uint32_t FreqWord2 = (uint32_t)FreqWord;
  
   uint16_t LSB = (uint16_t)(FreqWord2 & 0x3FFF);                     
@@ -281,22 +326,16 @@ void AD9833setFrequency(unsigned long frequency, int Waveform) {
   WriteRegister(LSB);                  // Write lower 16 bits to AD9833 registers
   WriteRegister(MSB);                  // Write upper 16 bits to AD9833 registers.
   WriteRegister(0xC000);               // Phase register
-  WriteRegister(Waveform);             // Exit & Reset to SINE, SQUARE or TRIANGLE
-  //WriteRegister(0x2028);               
+  WriteRegister(Waveform);             // Exit & Reset to SINE, SQUARE or TRIANGLE         
 }
 
 void WriteRegister(uint16_t dat) {
-  
-  //printf("DAT: %d", dat);
-           
-  spi_mode(2);
-  //delay(10);                          // Give AD9833 time to get ready to receive data.
+        
+  spi_mode(2);                        
   SELECT();                             // Set FSYNC low before writing to AD9833 registers
-  _delay_ms(10);       
+  _delay_ms(10);                        // Give AD9833 time to get ready to receive data.      
   uint8_t low = dat & 0xff;
   uint8_t high = (dat>>8) & 0xff;
-  //printf("LOW: %d",low);
-  //printf("HIGH: %d",high);
   SPI_SendByte(high);                   // Each AD9833 register is 32 bits wide and each 16
   SPI_SendByte(low);                    // bits has to be transferred as 2 x 8-bit bytes.
   DESELECT();                           //Write done. Set FSYNC high
