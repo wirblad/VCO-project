@@ -37,7 +37,7 @@ Functions:
 
   - Pot4: Set the tempo of the arpeggiator. How many milliseconds between each note
 
-  - Pot5: Set on off five random modes.
+  - Pot5: Set one off five random modes.
 
 
 
